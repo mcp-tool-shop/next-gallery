@@ -1,0 +1,214 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:vm="clr-namespace:Gallery.App.ViewModels"
+             xmlns:converters="clr-namespace:Gallery.App.Converters"
+             xmlns:domain="clr-namespace:Gallery.Domain.Models;assembly=Gallery.Domain"
+             x:Class="Gallery.App.MainPage"
+             x:DataType="vm:MainViewModel"
+             Title="NextGallery"
+             BackgroundColor="{StaticResource Gray950}">
+
+    <ContentPage.Resources>
+        <converters:FilePathToImageSourceConverter x:Key="FilePathConverter" />
+        <converters:FileSizeConverter x:Key="FileSizeConverter" />
+    </ContentPage.Resources>
+
+    <Grid ColumnDefinitions="220,*,320" RowDefinitions="Auto,*,Auto">
+
+        <!-- Header Bar -->
+        <Grid Grid.Row="0" Grid.ColumnSpan="3"
+              BackgroundColor="{StaticResource Gray900}"
+              Padding="12,8">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+
+            <Label Grid.Column="0"
+                   Text="NextGallery"
+                   FontSize="20"
+                   FontAttributes="Bold"
+                   TextColor="{StaticResource White}"
+                   VerticalOptions="Center" />
+
+            <HorizontalStackLayout Grid.Column="2" Spacing="8">
+                <Button Text="Add Folder"
+                        Command="{Binding AddFolderCommand}"
+                        BackgroundColor="{StaticResource Primary}" />
+                <Button Text="Scan All"
+                        Command="{Binding ScanAllCommand}"
+                        BackgroundColor="{StaticResource Secondary}" />
+                <Button Text="Refresh"
+                        Command="{Binding RefreshCommand}"
+                        BackgroundColor="{StaticResource Gray600}" />
+            </HorizontalStackLayout>
+        </Grid>
+
+        <!-- Left Panel: Library Folders -->
+        <Border Grid.Row="1" Grid.Column="0"
+                BackgroundColor="{StaticResource Gray900}"
+                Stroke="{StaticResource Gray800}"
+                StrokeThickness="0,0,1,0">
+            <Grid RowDefinitions="Auto,*">
+                <Label Grid.Row="0"
+                       Text="Library"
+                       FontSize="14"
+                       FontAttributes="Bold"
+                       TextColor="{StaticResource Gray300}"
+                       Margin="12,12,12,8" />
+
+                <CollectionView Grid.Row="1"
+                                ItemsSource="{Binding Folders}"
+                                SelectionMode="None">
+                    <CollectionView.ItemTemplate>
+                        <DataTemplate x:DataType="domain:LibraryFolder">
+                            <Grid Padding="12,6" ColumnDefinitions="*,Auto">
+                                <Label Text="{Binding Path}"
+                                       TextColor="{StaticResource White}"
+                                       FontSize="12"
+                                       LineBreakMode="TailTruncation"
+                                       VerticalOptions="Center" />
+                                <Button Grid.Column="1"
+                                        Text="×"
+                                        FontSize="14"
+                                        Padding="8,2"
+                                        BackgroundColor="Transparent"
+                                        TextColor="{StaticResource Gray500}"
+                                        Command="{Binding Source={RelativeSource AncestorType={x:Type vm:MainViewModel}}, Path=RemoveFolderCommand}"
+                                        CommandParameter="{Binding .}" />
+                            </Grid>
+                        </DataTemplate>
+                    </CollectionView.ItemTemplate>
+                </CollectionView>
+            </Grid>
+        </Border>
+
+        <!-- Center: Image Grid -->
+        <CollectionView Grid.Row="1" Grid.Column="1"
+                        ItemsSource="{Binding Items}"
+                        SelectedItem="{Binding SelectedItem, Mode=TwoWay}"
+                        SelectionMode="Single"
+                        BackgroundColor="{StaticResource Gray950}">
+            <CollectionView.ItemsLayout>
+                <GridItemsLayout Orientation="Vertical"
+                                 Span="6"
+                                 HorizontalItemSpacing="4"
+                                 VerticalItemSpacing="4" />
+            </CollectionView.ItemsLayout>
+            <CollectionView.ItemTemplate>
+                <DataTemplate x:DataType="domain:MediaItem">
+                    <Border BackgroundColor="{StaticResource Gray800}"
+                            StrokeThickness="0"
+                            Padding="0"
+                            HeightRequest="140"
+                            WidthRequest="140">
+                        <Grid>
+                            <!-- Thumbnail -->
+                            <Image Source="{Binding ThumbSmallPath, Converter={StaticResource FilePathConverter}}"
+                                   Aspect="AspectFill" />
+
+                            <!-- Favorite indicator -->
+                            <Label Text="♥"
+                                   FontSize="16"
+                                   TextColor="{StaticResource Primary}"
+                                   HorizontalOptions="End"
+                                   VerticalOptions="Start"
+                                   Margin="4"
+                                   IsVisible="{Binding IsFavorite}" />
+                        </Grid>
+                    </Border>
+                </DataTemplate>
+            </CollectionView.ItemTemplate>
+        </CollectionView>
+
+        <!-- Right Panel: Inspector -->
+        <Border Grid.Row="1" Grid.Column="2"
+                BackgroundColor="{StaticResource Gray900}"
+                Stroke="{StaticResource Gray800}"
+                StrokeThickness="1,0,0,0">
+            <ScrollView>
+                <VerticalStackLayout Padding="12" Spacing="12">
+                    <!-- Preview -->
+                    <Border BackgroundColor="{StaticResource Gray800}"
+                            HeightRequest="280"
+                            StrokeThickness="0">
+                        <Image Source="{Binding SelectedItem.ThumbLargePath, Converter={StaticResource FilePathConverter}}"
+                               Aspect="AspectFit" />
+                    </Border>
+
+                    <!-- File Info -->
+                    <VerticalStackLayout Spacing="8">
+                        <Label Text="{Binding SelectedItem.Path}"
+                               TextColor="{StaticResource White}"
+                               FontSize="12"
+                               FontAttributes="Bold"
+                               LineBreakMode="TailTruncation" />
+
+                        <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto" ColumnSpacing="12" RowSpacing="4">
+                            <Label Grid.Row="0" Grid.Column="0" Text="Size" TextColor="{StaticResource Gray400}" FontSize="12" />
+                            <Label Grid.Row="0" Grid.Column="1" Text="{Binding SelectedItem.SizeBytes, Converter={StaticResource FileSizeConverter}}" TextColor="{StaticResource White}" FontSize="12" />
+
+                            <Label Grid.Row="1" Grid.Column="0" Text="Dimensions" TextColor="{StaticResource Gray400}" FontSize="12" />
+                            <Label Grid.Row="1" Grid.Column="1" TextColor="{StaticResource White}" FontSize="12">
+                                <Label.Text>
+                                    <MultiBinding StringFormat="{}{0} × {1}">
+                                        <Binding Path="SelectedItem.Width" />
+                                        <Binding Path="SelectedItem.Height" />
+                                    </MultiBinding>
+                                </Label.Text>
+                            </Label>
+
+                            <Label Grid.Row="2" Grid.Column="0" Text="Modified" TextColor="{StaticResource Gray400}" FontSize="12" />
+                            <Label Grid.Row="2" Grid.Column="1" Text="{Binding SelectedItem.ModifiedAt, StringFormat='{0:g}'}" TextColor="{StaticResource White}" FontSize="12" />
+
+                            <Label Grid.Row="3" Grid.Column="0" Text="Taken" TextColor="{StaticResource Gray400}" FontSize="12" />
+                            <Label Grid.Row="3" Grid.Column="1" Text="{Binding SelectedItem.TakenAt, StringFormat='{0:g}'}" TextColor="{StaticResource White}" FontSize="12" />
+
+                            <Label Grid.Row="4" Grid.Column="0" Text="Type" TextColor="{StaticResource Gray400}" FontSize="12" />
+                            <Label Grid.Row="4" Grid.Column="1" Text="{Binding SelectedItem.Extension}" TextColor="{StaticResource White}" FontSize="12" />
+                        </Grid>
+
+                        <!-- Actions -->
+                        <HorizontalStackLayout Spacing="8" Margin="0,8,0,0">
+                            <Button Text="♥"
+                                    Command="{Binding ToggleFavoriteCommand}"
+                                    BackgroundColor="{StaticResource Gray700}"
+                                    TextColor="{StaticResource Primary}"
+                                    WidthRequest="44"
+                                    HeightRequest="44"
+                                    CornerRadius="4" />
+                            <Button Text="Open"
+                                    Command="{Binding OpenInExplorerCommand}"
+                                    BackgroundColor="{StaticResource Gray700}"
+                                    HeightRequest="44" />
+                        </HorizontalStackLayout>
+                    </VerticalStackLayout>
+                </VerticalStackLayout>
+            </ScrollView>
+        </Border>
+
+        <!-- Status Bar -->
+        <Grid Grid.Row="2" Grid.ColumnSpan="3"
+              BackgroundColor="{StaticResource Gray900}"
+              Padding="12,6">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+
+            <Label Grid.Column="0"
+                   Text="{Binding ScanStatus}"
+                   TextColor="{StaticResource Gray400}"
+                   FontSize="12"
+                   VerticalOptions="Center" />
+
+            <Label Grid.Column="1"
+                   Text="{Binding ItemCount, StringFormat='{0} items'}"
+                   TextColor="{StaticResource Gray400}"
+                   FontSize="12"
+                   VerticalOptions="Center" />
+        </Grid>
+    </Grid>
+</ContentPage>

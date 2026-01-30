@@ -1,0 +1,21 @@
+# Build outputs
+bin/
+obj/
+[Dd]ebug/
+[Rr]elease/
+
+# IDE
+.vs/
+*.user
+*.suo
+*.csproj.user
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Package artifacts
+*.nupkg
