@@ -9,8 +9,18 @@ namespace Gallery.App;
 
 public static class MauiProgram
 {
+    /// <summary>
+    /// Workspace path from command-line args. Set by platform-specific entry point.
+    /// </summary>
+    public static string? WorkspacePath { get; set; }
+
     public static MauiApp CreateMauiApp()
     {
+#if WINDOWS
+        // Copy from Windows App.xaml.cs static property
+        WorkspacePath = Gallery.App.WinUI.App.WorkspacePath;
+#endif
+
         var builder = MauiApp.CreateBuilder();
         builder
             .UseMauiApp<App>()
@@ -29,7 +39,17 @@ public static class MauiProgram
         builder.Services.AddSingleton<SelectionService>();
         builder.Services.AddSingleton<QueryService>();
         builder.Services.AddSingleton<PrefetchService>();
-        builder.Services.AddSingleton<WorkspaceConfiguration>();
+
+        // Configure workspace from command-line
+        builder.Services.AddSingleton(sp =>
+        {
+            var config = new WorkspaceConfiguration();
+            if (!string.IsNullOrEmpty(WorkspacePath))
+            {
+                config.WorkspacePath = WorkspacePath;
+            }
+            return config;
+        });
 
         // Register ViewModels
         builder.Services.AddTransient<MainViewModel>();
@@ -45,6 +65,9 @@ public static class MauiProgram
         builder.Services.AddTransient<MainPage>();
         builder.Services.AddTransient<QuickPreviewOverlay>();
         builder.Services.AddTransient<CodeComfyPage>();
+
+        // Register App with service provider access
+        builder.Services.AddSingleton<App>(sp => new App(sp));
 
 #if DEBUG
         builder.Logging.AddDebug();
