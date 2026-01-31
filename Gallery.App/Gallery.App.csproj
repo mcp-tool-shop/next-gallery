@@ -50,6 +50,35 @@
 		<ProjectReference Include="..\Gallery.Infrastructure\Gallery.Infrastructure.csproj" />
 	</ItemGroup>
 
+	<!--
+	FFmpeg bundling strategy:
+	- Dev builds: include binaries if present (falls back gracefully if missing)
+	- MSIX publish: use -r win-x64 or -r win-arm64 to include only matching arch
+	-->
+
+	<!-- Dev builds: include x64 binaries for local development -->
+	<ItemGroup Condition="'$(RuntimeIdentifier)'=='' And Exists('Assets\ffmpeg\win-x64\ffmpeg.exe')">
+		<Content Include="Assets\ffmpeg\win-x64\ffmpeg.exe" CopyToOutputDirectory="PreserveNewest" Link="ffmpeg\ffmpeg.exe" />
+		<Content Include="Assets\ffmpeg\win-x64\ffprobe.exe" CopyToOutputDirectory="PreserveNewest" Link="ffmpeg\ffprobe.exe" Condition="Exists('Assets\ffmpeg\win-x64\ffprobe.exe')" />
+	</ItemGroup>
+
+	<!-- Publish builds: x64 binaries (only included in win-x64 builds) -->
+	<ItemGroup Condition="'$(RuntimeIdentifier)'=='win-x64' And Exists('Assets\ffmpeg\win-x64\ffmpeg.exe')">
+		<Content Include="Assets\ffmpeg\win-x64\ffmpeg.exe" CopyToOutputDirectory="PreserveNewest" Link="ffmpeg\ffmpeg.exe" />
+		<Content Include="Assets\ffmpeg\win-x64\ffprobe.exe" CopyToOutputDirectory="PreserveNewest" Link="ffmpeg\ffprobe.exe" Condition="Exists('Assets\ffmpeg\win-x64\ffprobe.exe')" />
+	</ItemGroup>
+
+	<!-- Publish builds: ARM64 binaries (only included in win-arm64 builds) -->
+	<ItemGroup Condition="'$(RuntimeIdentifier)'=='win-arm64' And Exists('Assets\ffmpeg\win-arm64\ffmpeg.exe')">
+		<Content Include="Assets\ffmpeg\win-arm64\ffmpeg.exe" CopyToOutputDirectory="PreserveNewest" Link="ffmpeg\ffmpeg.exe" />
+		<Content Include="Assets\ffmpeg\win-arm64\ffprobe.exe" CopyToOutputDirectory="PreserveNewest" Link="ffmpeg\ffprobe.exe" Condition="Exists('Assets\ffmpeg\win-arm64\ffprobe.exe')" />
+	</ItemGroup>
+
+	<!-- FFmpeg licenses (always included when present) -->
+	<ItemGroup Condition="Exists('Assets\ffmpeg\LICENSES\')">
+		<Content Include="Assets\ffmpeg\LICENSES\**\*" CopyToOutputDirectory="PreserveNewest" Link="ffmpeg\LICENSES\%(RecursiveDir)%(Filename)%(Extension)" />
+	</ItemGroup>
+
 	<ItemGroup>
 		<PackageReference Include="Microsoft.Maui.Controls" Version="$(MauiVersion)" />
 		<PackageReference Include="Microsoft.Extensions.Logging.Debug" Version="9.0.0" />

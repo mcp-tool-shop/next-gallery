@@ -13,6 +13,7 @@ public class IsNotNullOrEmptyConverter : IValueConverter
         {
             null => false,
             string s => !string.IsNullOrEmpty(s),
+            int i => i != 0,
             _ => true
         };
     }

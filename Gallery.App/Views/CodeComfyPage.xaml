@@ -1,0 +1,169 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:vm="clr-namespace:Gallery.App.ViewModels"
+             xmlns:selectors="clr-namespace:Gallery.App.TemplateSelectors"
+             xmlns:converters="clr-namespace:Gallery.App.Converters"
+             xmlns:index="clr-namespace:Gallery.Domain.Index;assembly=Gallery.Domain"
+             x:Class="Gallery.App.Views.CodeComfyPage"
+             x:DataType="vm:CodeComfyViewModel"
+             Title="CodeComfy Gallery">
+
+    <ContentPage.Resources>
+        <converters:BannerVisibilityConverter x:Key="BannerVisibility" />
+        <converters:BannerSeverityColorConverter x:Key="BannerColor" />
+        <converters:IsNotNullOrEmptyConverter x:Key="IsNotNullOrEmpty" />
+    </ContentPage.Resources>
+
+    <Grid RowDefinitions="Auto,*,Auto">
+        <!-- Banner (always present, collapsed when none) -->
+        <Frame Grid.Row="0"
+               IsVisible="{Binding Banner, Converter={StaticResource BannerVisibility}}"
+               BackgroundColor="{Binding Banner, Converter={StaticResource BannerColor}}"
+               Padding="12,8"
+               CornerRadius="0"
+               Margin="0">
+            <HorizontalStackLayout Spacing="8">
+                <Label Text="{Binding Banner.Message}"
+                       VerticalOptions="Center"
+                       FontSize="14" />
+                <Label Text="{Binding Banner.SkippedCount, StringFormat='({0} skipped)'}"
+                       IsVisible="{Binding Banner.SkippedCount, Converter={StaticResource IsNotNullOrEmpty}}"
+                       VerticalOptions="Center"
+                       FontSize="12"
+                       TextColor="DimGray" />
+            </HorizontalStackLayout>
+        </Frame>
+
+        <!-- State-specific content via switch on CurrentCodeComfyViewState -->
+        <Grid Grid.Row="1">
+            <!-- Loading State -->
+            <VerticalStackLayout IsVisible="{Binding CurrentCodeComfyViewState, Converter={x:Static vm:CodeComfyViewStateConverters.IsLoading}}"
+                                 VerticalOptions="Center" HorizontalOptions="Center" Spacing="16">
+                <ActivityIndicator IsRunning="True" HeightRequest="48" WidthRequest="48" />
+                <Label Text="Loading..." FontSize="18" HorizontalOptions="Center" />
+            </VerticalStackLayout>
+
+            <!-- Empty State -->
+            <VerticalStackLayout IsVisible="{Binding CurrentCodeComfyViewState, Converter={x:Static vm:CodeComfyViewStateConverters.IsEmpty}}"
+                                 VerticalOptions="Center" HorizontalOptions="Center" Spacing="16" Padding="32">
+                <Label Text="Waiting for first generation..."
+                       FontSize="24"
+                       FontAttributes="Bold"
+                       HorizontalOptions="Center" />
+                <Label Text="No jobs yet. Run a generation in ComfyUI to see results here."
+                       FontSize="14"
+                       TextColor="Gray"
+                       HorizontalOptions="Center" />
+                <Button Text="Refresh"
+                        Command="{Binding RefreshCommand}"
+                        HorizontalOptions="Center"
+                        Margin="0,16,0,0" />
+                <Button Text="Open Outputs Folder"
+                        Command="{Binding OpenOutputsFolderCommand}"
+                        HorizontalOptions="Center" />
+            </VerticalStackLayout>
+
+            <!-- List State -->
+            <Grid IsVisible="{Binding CurrentCodeComfyViewState, Converter={x:Static vm:CodeComfyViewStateConverters.IsList}}"
+                  RowDefinitions="Auto,*">
+                <!-- Header -->
+                <HorizontalStackLayout Grid.Row="0" Padding="16,8" Spacing="16">
+                    <Label Text="{Binding Jobs.Count, StringFormat='{0} jobs'}"
+                           VerticalOptions="Center"
+                           FontSize="16" />
+                    <Button Text="Refresh"
+                            Command="{Binding RefreshCommand}"
+                            VerticalOptions="Center" />
+                    <ActivityIndicator IsRunning="{Binding IsRefreshing}"
+                                       IsVisible="{Binding IsRefreshing}"
+                                       HeightRequest="20"
+                                       WidthRequest="20"
+                                       VerticalOptions="Center" />
+                </HorizontalStackLayout>
+
+                <!-- Job List -->
+                <CollectionView Grid.Row="1"
+                                ItemsSource="{Binding Jobs}"
+                                SelectedItem="{Binding SelectedJob}"
+                                SelectionMode="Single">
+                    <CollectionView.ItemTemplate>
+                        <DataTemplate x:DataType="index:JobRow">
+                            <Frame Margin="8" Padding="12" BorderColor="LightGray" CornerRadius="8">
+                                <Grid ColumnDefinitions="80,*" RowDefinitions="Auto,Auto,Auto" ColumnSpacing="12">
+                                    <!-- Thumbnail placeholder -->
+                                    <Frame Grid.RowSpan="3"
+                                           BackgroundColor="LightGray"
+                                           WidthRequest="80"
+                                           HeightRequest="80"
+                                           CornerRadius="4"
+                                           Padding="0">
+                                        <Label Text="{Binding Kind}"
+                                               HorizontalOptions="Center"
+                                               VerticalOptions="Center"
+                                               TextColor="Gray" />
+                                    </Frame>
+
+                                    <!-- Job Info -->
+                                    <Label Grid.Column="1" Grid.Row="0"
+                                           Text="{Binding Prompt}"
+                                           FontSize="14"
+                                           FontAttributes="Bold"
+                                           LineBreakMode="TailTruncation"
+                                           MaxLines="2" />
+                                    <Label Grid.Column="1" Grid.Row="1"
+                                           Text="{Binding CreatedAt, StringFormat='{0:g}'}"
+                                           FontSize="12"
+                                           TextColor="Gray" />
+                                    <HorizontalStackLayout Grid.Column="1" Grid.Row="2" Spacing="8">
+                                        <Label Text="{Binding PresetId}" FontSize="11" TextColor="DimGray" />
+                                        <Label Text="{Binding Seed, StringFormat='Seed: {0}'}" FontSize="11" TextColor="DimGray" />
+                                        <Label Text="{Binding Files.Count, StringFormat='{0} files'}" FontSize="11" TextColor="DimGray" />
+                                    </HorizontalStackLayout>
+                                </Grid>
+                            </Frame>
+                        </DataTemplate>
+                    </CollectionView.ItemTemplate>
+                </CollectionView>
+            </Grid>
+
+            <!-- Fatal State -->
+            <VerticalStackLayout IsVisible="{Binding CurrentCodeComfyViewState, Converter={x:Static vm:CodeComfyViewStateConverters.IsFatal}}"
+                                 VerticalOptions="Center" HorizontalOptions="Center" Spacing="16" Padding="32">
+                <Label Text="⚠️" FontSize="48" HorizontalOptions="Center" />
+                <Label Text="Error"
+                       FontSize="24"
+                       FontAttributes="Bold"
+                       TextColor="Red"
+                       HorizontalOptions="Center" />
+                <Label Text="{Binding ErrorMessage}"
+                       FontSize="14"
+                       HorizontalOptions="Center"
+                       HorizontalTextAlignment="Center" />
+                <Button Text="Refresh"
+                        Command="{Binding RefreshCommand}"
+                        HorizontalOptions="Center"
+                        Margin="0,16,0,0" />
+                <Button Text="Open Outputs Folder"
+                        Command="{Binding OpenOutputsFolderCommand}"
+                        HorizontalOptions="Center" />
+            </VerticalStackLayout>
+        </Grid>
+
+        <!-- Diagnostics Panel (Ctrl+Shift+D to toggle) -->
+        <Frame Grid.Row="2"
+               IsVisible="{Binding IsDiagnosticsVisible}"
+               BackgroundColor="#1E1E1E"
+               Padding="12"
+               CornerRadius="0"
+               Margin="0">
+            <ScrollView MaximumHeightRequest="200">
+                <Label Text="{Binding DiagnosticsText}"
+                       FontFamily="Consolas"
+                       FontSize="11"
+                       TextColor="#D4D4D4"
+                       LineBreakMode="NoWrap" />
+            </ScrollView>
+        </Frame>
+    </Grid>
+</ContentPage>

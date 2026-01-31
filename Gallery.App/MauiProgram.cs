@@ -29,13 +29,22 @@ public static class MauiProgram
         builder.Services.AddSingleton<SelectionService>();
         builder.Services.AddSingleton<QueryService>();
         builder.Services.AddSingleton<PrefetchService>();
+        builder.Services.AddSingleton<WorkspaceConfiguration>();
 
         // Register ViewModels
         builder.Services.AddTransient<MainViewModel>();
+        builder.Services.AddTransient<CodeComfyViewModel>(sp =>
+        {
+            var config = sp.GetRequiredService<WorkspaceConfiguration>();
+            if (config.WorkspacePath == null)
+                throw new InvalidOperationException("WorkspacePath must be set before creating CodeComfyViewModel");
+            return new CodeComfyViewModel(config.WorkspacePath);
+        });
 
         // Register Pages and Views
         builder.Services.AddTransient<MainPage>();
         builder.Services.AddTransient<QuickPreviewOverlay>();
+        builder.Services.AddTransient<CodeComfyPage>();
 
 #if DEBUG
         builder.Logging.AddDebug();

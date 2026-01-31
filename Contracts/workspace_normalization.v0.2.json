@@ -1,0 +1,365 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Workspace Normalization Test Vectors",
+  "description": "Shared test vectors for workspace key derivation. Both CodeComfy and NextGallery MUST produce identical keys for the same physical workspace.",
+  "version": "0.2",
+  "key_length_hex": 32,
+  "algorithm": {
+    "description": "Workspace key derivation algorithm",
+    "formula": "key = sha256( UTF8( NFC( canon_path ) ) ).hexdigest().substring(0, 32)",
+    "steps": [
+      "1. Validate input (reject empty, whitespace-only, or syntactically invalid paths)",
+      "2. Resolve to absolute path using OS function (os.path.abspath / Path.GetFullPath) - THIS IS THE AUTHORITATIVE BOUNDARY",
+      "3. Defensive clamp: if path starts with ///+ (3+ slashes), clamp to exactly //",
+      "4. Convert all backslashes to forward slashes",
+      "5. Normalize Unicode to NFC form",
+      "6. Lowercase using INVARIANT culture (ToLowerInvariant in C#, str.lower() in Python)",
+      "7. Strip trailing slash UNLESS it's a root (drive root c:/ or UNC root //server/share)",
+      "8. For bare drive letter (c:), append slash to get c:/",
+      "9. SHA-256 hash the UTF-8 encoded canonical path",
+      "10. Take first 32 hex characters (128 bits), lowercase"
+    ],
+    "os_boundary_note": "Step 2 (os.path.abspath / Path.GetFullPath) is the AUTHORITATIVE boundary. It collapses multiple slashes, resolves . and .., and handles platform-specific quirks. All subsequent steps operate on Step 2 output. Vectors include step1_fullpath to document this boundary.",
+    "pseudocode": {
+      "python": [
+        "import os",
+        "import unicodedata",
+        "import hashlib",
+        "",
+        "def is_unc_root(path: str) -> bool:",
+        "    '''UNC root = exactly //server/share (2 non-empty segments after //)'''",
+        "    if not path.startswith('//'):",
+        "        return False",
+        "    parts = [p for p in path[2:].split('/') if p]",
+        "    return len(parts) == 2",
+        "",
+        "def normalize(path: str) -> str:",
+        "    # Step 1: Validate",
+        "    if not path or path.isspace():",
+        "        raise ValueError('Path cannot be empty or whitespace-only')",
+        "    ",
+        "    # Step 2: Resolve to absolute (lexical - no symlink deref) - OS BOUNDARY",
+        "    path = os.path.abspath(path)",
+        "    ",
+        "    # Step 3: Defensive clamp for /// edge case",
+        "    path = path.replace('\\\\', '/')",
+        "    if path.startswith('///') :",
+        "        path = '//' + path.lstrip('/')",
+        "    ",
+        "    # Step 4: Forward slashes (already done in Step 3)",
+        "    ",
+        "    # Step 5: Unicode NFC",
+        "    path = unicodedata.normalize('NFC', path)",
+        "    ",
+        "    # Step 6: Invariant lowercase",
+        "    path = path.lower()",
+        "    ",
+        "    # Step 7-8: Trailing slash handling",
+        "    if is_unc_root(path):",
+        "        path = path.rstrip('/')",
+        "    elif len(path) == 2 and path[1] == ':':",
+        "        path = path + '/'",
+        "    elif len(path) > 3 and path.endswith('/'):",
+        "        path = path.rstrip('/')",
+        "    ",
+        "    return path",
+        "",
+        "def workspace_key(path: str) -> str:",
+        "    canon = normalize(path)",
+        "    return hashlib.sha256(canon.encode('utf-8')).hexdigest()[:32]"
+      ],
+      "csharp": [
+        "using System.Text;",
+        "using System.Security.Cryptography;",
+        "",
+        "bool IsUncRoot(string path) {",
+        "    // UNC root = exactly //server/share (2 non-empty segments after //)",
+        "    if (!path.StartsWith(\"//\")) return false;",
+        "    var parts = path[2..].Split('/', StringSplitOptions.RemoveEmptyEntries);",
+        "    return parts.Length == 2;",
+        "}",
+        "",
+        "string Normalize(string path) {",
+        "    // Step 1: Validate",
+        "    if (string.IsNullOrWhiteSpace(path))",
+        "        throw new ArgumentException(\"Path cannot be empty or whitespace-only\");",
+        "    ",
+        "    // Step 2: Resolve to absolute (lexical - catches ArgumentException, etc.) - OS BOUNDARY",
+        "    try {",
+        "        path = Path.GetFullPath(path);",
+        "    } catch (Exception ex) when (ex is ArgumentException or NotSupportedException or PathTooLongException) {",
+        "        throw new ArgumentException($\"Invalid path syntax: {ex.Message}\", ex);",
+        "    }",
+        "    ",
+        "    // Step 3: Forward slashes + defensive clamp",
+        "    path = path.Replace('\\\\', '/');",
+        "    if (path.StartsWith(\"///\")) {",
+        "        path = \"//\" + path.TrimStart('/');",
+        "    }",
+        "    ",
+        "    // Step 4: Unicode NFC",
+        "    path = path.Normalize(NormalizationForm.FormC);",
+        "    ",
+        "    // Step 5: INVARIANT lowercase (critical!)",
+        "    path = path.ToLowerInvariant();",
+        "    ",
+        "    // Step 6-7: Trailing slash handling",
+        "    if (IsUncRoot(path)) {",
+        "        path = path.TrimEnd('/');",
+        "    } else if (path.Length == 2 && path[1] == ':') {",
+        "        path += '/';",
+        "    } else if (path.Length > 3 && path.EndsWith('/')) {",
+        "        path = path.TrimEnd('/');",
+        "    }",
+        "    ",
+        "    return path;",
+        "}",
+        "",
+        "string WorkspaceKey(string path) {",
+        "    var canon = Normalize(path);",
+        "    var bytes = Encoding.UTF8.GetBytes(canon);",
+        "    var hash = SHA256.HashData(bytes);",
+        "    return Convert.ToHexString(hash)[..32].ToLowerInvariant();",
+        "}"
+      ]
+    },
+    "notes": [
+      "LEXICAL resolution: os.path.abspath / Path.GetFullPath resolve . and .. textually and collapse multiple slashes, but do NOT follow symlinks/junctions.",
+      "INVARIANT casing: C# MUST use ToLowerInvariant(), not ToLower(). Python's str.lower() is invariant for ASCII.",
+      "NFC normalization: macOS often uses NFD in filesystem; normalizing to NFC ensures cross-platform consistency.",
+      "This is a ROUTING KEY, not a cryptographic identity. 32 hex chars (128 bits) makes collisions astronomically unlikely.",
+      "Multiple consecutive slashes are collapsed by os.path.abspath / Path.GetFullPath BEFORE our algorithm processes them.",
+      "The step1_fullpath field documents what the OS returns BEFORE our string processing. This is the authoritative boundary."
+    ]
+  },
+  "failure_conditions": {
+    "description": "These inputs MUST cause an error (throw exception / return error). Implementations MUST NOT return a fallback key.",
+    "conditions": [
+      {
+        "id": "empty_string",
+        "input": "",
+        "reason": "Empty string cannot be made absolute"
+      },
+      {
+        "id": "whitespace_only",
+        "input": "   ",
+        "reason": "Whitespace-only string is effectively empty"
+      },
+      {
+        "id": "tabs_newlines",
+        "input": "\t\n",
+        "reason": "Whitespace characters (tabs, newlines) are not valid paths"
+      }
+    ],
+    "platform_specific": {
+      "csharp": [
+        "ArgumentException from Path.GetFullPath (invalid characters)",
+        "NotSupportedException from Path.GetFullPath (colon in wrong position)",
+        "PathTooLongException from Path.GetFullPath"
+      ],
+      "python": [
+        "os.path.abspath rarely throws, so explicit validation for empty/whitespace is required",
+        "Consider validating for null bytes which are invalid in paths"
+      ]
+    },
+    "note": "Both implementations must reject the same set of inputs. If Python accepts something C# rejects, add explicit validation to Python."
+  },
+  "vectors": [
+    {
+      "id": "basic_windows_path",
+      "description": "Standard Windows path",
+      "input": "C:\\Users\\dev\\project",
+      "step1_fullpath": "C:\\Users\\dev\\project",
+      "canon_path": "c:/users/dev/project",
+      "workspace_key": "88b49a59944589bd4779b7931d127abc"
+    },
+    {
+      "id": "lowercase_drive",
+      "description": "Lowercase drive letter - must match uppercase",
+      "input": "c:\\Users\\dev\\project",
+      "step1_fullpath": "c:\\Users\\dev\\project",
+      "canon_path": "c:/users/dev/project",
+      "workspace_key": "88b49a59944589bd4779b7931d127abc"
+    },
+    {
+      "id": "mixed_case_path",
+      "description": "Mixed case in path components",
+      "input": "C:\\USERS\\DEV\\PROJECT",
+      "step1_fullpath": "C:\\USERS\\DEV\\PROJECT",
+      "canon_path": "c:/users/dev/project",
+      "workspace_key": "88b49a59944589bd4779b7931d127abc"
+    },
+    {
+      "id": "trailing_backslash",
+      "description": "Path with trailing backslash - must match without",
+      "input": "C:\\Users\\dev\\project\\",
+      "step1_fullpath": "C:\\Users\\dev\\project",
+      "step1_note": "OS may or may not strip trailing slash - we normalize anyway",
+      "canon_path": "c:/users/dev/project",
+      "workspace_key": "88b49a59944589bd4779b7931d127abc"
+    },
+    {
+      "id": "forward_slashes",
+      "description": "Forward slashes on Windows",
+      "input": "C:/Users/dev/project",
+      "step1_fullpath": "C:\\Users\\dev\\project",
+      "step1_note": "os.path.abspath converts forward slashes to backslashes on Windows",
+      "canon_path": "c:/users/dev/project",
+      "workspace_key": "88b49a59944589bd4779b7931d127abc"
+    },
+    {
+      "id": "drive_root",
+      "description": "Drive root (trailing slash preserved for roots)",
+      "input": "C:\\",
+      "step1_fullpath": "C:\\",
+      "canon_path": "c:/",
+      "workspace_key": "508e9f1d9b22d5705a4eda7b70c585c6"
+    },
+    {
+      "id": "drive_root_no_slash",
+      "description": "Drive root without trailing slash",
+      "input": "C:",
+      "step1_fullpath": "C:\\",
+      "step1_note": "os.path.abspath('C:') typically returns cwd on C: drive, but for this test we assume C:\\ behavior",
+      "canon_path": "c:/",
+      "workspace_key": "508e9f1d9b22d5705a4eda7b70c585c6"
+    },
+    {
+      "id": "unc_path",
+      "description": "UNC network path (non-root)",
+      "input": "\\\\server\\share\\project",
+      "step1_fullpath": "\\\\server\\share\\project",
+      "canon_path": "//server/share/project",
+      "workspace_key": "ed0860ba55f5cefa8abb78b6f9ec76e0"
+    },
+    {
+      "id": "unc_mixed_case",
+      "description": "UNC path with mixed case",
+      "input": "\\\\SERVER\\Share\\Project",
+      "step1_fullpath": "\\\\SERVER\\Share\\Project",
+      "canon_path": "//server/share/project",
+      "workspace_key": "ed0860ba55f5cefa8abb78b6f9ec76e0"
+    },
+    {
+      "id": "unc_root",
+      "description": "UNC share root - trailing slash stripped",
+      "input": "\\\\server\\share\\",
+      "step1_fullpath": "\\\\server\\share",
+      "step1_note": "OS strips trailing slash from UNC root",
+      "canon_path": "//server/share",
+      "workspace_key": "72babc19d3a8ca32407efb559bd05a03"
+    },
+    {
+      "id": "unc_root_no_slash",
+      "description": "UNC share root without trailing slash",
+      "input": "\\\\server\\share",
+      "step1_fullpath": "\\\\server\\share",
+      "canon_path": "//server/share",
+      "workspace_key": "72babc19d3a8ca32407efb559bd05a03"
+    },
+    {
+      "id": "unc_trailing_multi_slash",
+      "description": "UNC path with multiple trailing slashes (collapsed by OS)",
+      "input": "\\\\server\\share\\project\\\\\\\\",
+      "step1_fullpath": "\\\\server\\share\\project",
+      "step1_note": "os.path.abspath collapses multiple trailing slashes",
+      "canon_path": "//server/share/project",
+      "workspace_key": "ed0860ba55f5cefa8abb78b6f9ec76e0"
+    },
+    {
+      "id": "unc_root_multi_slash",
+      "description": "UNC root with extra trailing slashes (collapsed by OS)",
+      "input": "\\\\server\\share\\\\",
+      "step1_fullpath": "\\\\server\\share",
+      "step1_note": "OS collapses multiple slashes before our algorithm runs",
+      "canon_path": "//server/share",
+      "workspace_key": "72babc19d3a8ca32407efb559bd05a03"
+    },
+    {
+      "id": "spaces_in_path",
+      "description": "Path with spaces (preserved)",
+      "input": "C:\\Users\\dev\\My Projects\\demo",
+      "step1_fullpath": "C:\\Users\\dev\\My Projects\\demo",
+      "canon_path": "c:/users/dev/my projects/demo",
+      "workspace_key": "028473bbe73d9fafb2f4ec6caa628033"
+    },
+    {
+      "id": "unicode_path",
+      "description": "Path with Unicode characters (Chinese) - NFC normalized",
+      "input": "C:\\Users\\dev\\项目\\demo",
+      "step1_fullpath": "C:\\Users\\dev\\项目\\demo",
+      "canon_path": "c:/users/dev/项目/demo",
+      "workspace_key": "9b20ef9372f1c717831c424939f409c3"
+    },
+    {
+      "id": "deep_nesting",
+      "description": "Deeply nested path",
+      "input": "C:\\Users\\dev\\projects\\client\\frontend\\src\\components",
+      "step1_fullpath": "C:\\Users\\dev\\projects\\client\\frontend\\src\\components",
+      "canon_path": "c:/users/dev/projects/client/frontend/src/components",
+      "workspace_key": "f1d6d2ad5e5e83a57bfc02a616e1e5a7"
+    }
+  ],
+  "invariants": [
+    {
+      "name": "idempotency",
+      "description": "normalize(normalize(x)) == normalize(x) - normalizing an already-normalized path produces the same result",
+      "test": "For each vector, verify normalize(canon_path) == canon_path"
+    },
+    {
+      "name": "case_insensitivity",
+      "description": "Any case variation of the same path produces the same key",
+      "vectors": ["basic_windows_path", "lowercase_drive", "mixed_case_path"]
+    },
+    {
+      "name": "trailing_slash_normalization",
+      "description": "Trailing slashes are stripped (except for roots)",
+      "vectors": ["basic_windows_path", "trailing_backslash"]
+    },
+    {
+      "name": "slash_direction",
+      "description": "Forward and back slashes produce same result",
+      "vectors": ["basic_windows_path", "forward_slashes"]
+    },
+    {
+      "name": "drive_root_consistency",
+      "description": "Drive roots with/without slash are equivalent",
+      "vectors": ["drive_root", "drive_root_no_slash"]
+    },
+    {
+      "name": "unc_case_insensitivity",
+      "description": "UNC paths are case-normalized",
+      "vectors": ["unc_path", "unc_mixed_case"]
+    },
+    {
+      "name": "unc_root_consistency",
+      "description": "UNC share roots with/without trailing slash are equivalent",
+      "vectors": ["unc_root", "unc_root_no_slash", "unc_root_multi_slash"]
+    },
+    {
+      "name": "multi_slash_collapse",
+      "description": "Multiple trailing slashes are collapsed to produce same key",
+      "vectors": ["unc_path", "unc_trailing_multi_slash"]
+    }
+  ],
+  "test_requirements": {
+    "implementations_must": [
+      "Pass ALL vectors in this file",
+      "FAIL on all inputs in failure_conditions",
+      "Satisfy ALL invariants",
+      "Produce identical workspace_key for equivalent paths",
+      "Use INVARIANT casing (ToLowerInvariant in C#)",
+      "Normalize Unicode to NFC before hashing",
+      "Hash UTF-8 bytes (not UTF-16 or other encodings)",
+      "Return exactly 32 lowercase hex characters",
+      "Treat Step 1 (OS path resolution) as the authoritative boundary"
+    ],
+    "edge_cases_to_handle": [
+      "8.3 short names (PROGRA~1) - os.path.abspath / Path.GetFullPath expands these",
+      "Relative paths - resolved against cwd by os.path.abspath / Path.GetFullPath",
+      "Multiple consecutive slashes - collapsed by os.path.abspath / Path.GetFullPath",
+      "/// edge case - defensive clamp to // after OS resolution (should never occur but guard anyway)"
+    ],
+    "symlink_policy": "LEXICAL resolution only. os.path.abspath / Path.GetFullPath do NOT dereference symlinks. Same folder via different symlink = different workspace key. This is intentional."
+  }
+}
